@@ -89,6 +89,7 @@ class HomeScreen : public UIScreen {
     RECENT,
     RADIO,
     BLUETOOTH,
+    CANNED,
     ADVERT,
 #if ENV_INCLUDE_GPS == 1
     GPS,
@@ -285,6 +286,11 @@ public:
           32, 32);
       display.setTextSize(1);
       display.drawTextCentered(display.width() / 2, 64 - 11, "toggle: " PRESS_LABEL);
+    } else if (_page == HomePage::CANNED) {
+      display.setColor(DisplayDriver::GREEN);
+      display.drawXbm((display.width() - 32) / 2, 18, advert_icon, 32, 32);
+      display.setTextSize(1);
+      display.drawTextCentered(display.width() / 2, 64 - 11, "send: " PRESS_LABEL);
     } else if (_page == HomePage::ADVERT) {
       display.setColor(DisplayDriver::GREEN);
       display.drawXbm((display.width() - 32) / 2, 18, advert_icon, 32, 32);
@@ -430,6 +436,19 @@ public:
         _task->disableSerial();
       } else {
         _task->enableSerial();
+      }
+      return true;
+    }
+    if (c == KEY_ENTER && _page == HomePage::CANNED) {
+      ChannelDetails channel;
+      if (the_mesh.getChannel(0, channel)) {
+        if (the_mesh.sendGroupMessage(millis(), channel.channel, the_mesh.getNodePrefs()->node_name, "test", 4)) {
+          _task->showAlert("Sent test", 1000);
+        } else {
+          _task->showAlert("Send failed", 1000);
+        }
+      } else {
+        _task->showAlert("Public channel missing", 1000);
       }
       return true;
     }
