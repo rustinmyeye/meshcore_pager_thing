@@ -1,4 +1,5 @@
 #include "UITask.h"
+#include <string.h>
 #include <helpers/TxtDataHelpers.h>
 #include "../MyMesh.h"
 #include "target.h"
@@ -30,6 +31,42 @@
 #endif
 
 #include "icons.h"
+
+struct CannedMessage {
+    const char *label;
+    const char *text;
+};
+
+static const CannedMessage cannedMessages[] = {
+    { "Test",         "Test" },
+    { "Hello",        "Hello" },
+    { "Good Morning", "Good Morning" },
+    { "Thanks!",      "Thanks!" },
+    { "Goodnight",    "Goodnight" },
+    { "On My Way",    "On My Way" },
+    { "Cheers Emoji",         "🍻" },
+    { "Ducks R Cool",         "Ducks R Cool" },
+    { "Yes",         "Yes" },
+    { "No",         "No" },
+    { "knife fight?",         "Wanna have a knife fight?" },
+    { "Enya",         "Listening to Enya right now" },
+    { "squawk test",         "@[squawk] !test" },
+    
+};
+
+static const int NUM_CANNED_MESSAGES =
+    sizeof(cannedMessages) / sizeof(cannedMessages[0]);
+
+static const char *customCandidates[] = {
+    "SEND","DEL","BACK",
+    " ",".","A","B","C","D","E","F","G","H","I","J","K","L","M",
+    "N","O","P","Q","R","S","T","U","V","W","X","Y","Z",
+    ",","!","?","-","_","@","/",
+    "0","1","2","3","4","5","6","7","8","9"
+};
+
+static const int NUM_CUSTOM_CANDIDATES =
+    sizeof(customCandidates) / sizeof(customCandidates[0]);
 
 class SplashScreen : public UIScreen {
   UITask* _task;
@@ -107,6 +144,19 @@ class HomeScreen : public UIScreen {
   NodePrefs* _node_prefs;
   uint8_t _page;
   bool _shutdown_init;
+  bool selectingCanned = false;
+  bool selectingChannel = false;
+
+  uint8_t cannedIndex = 0;
+  uint8_t channelIndex = 0;
+  uint8_t channelList[8];
+  uint8_t channelListCount = 0;
+  bool composingCustom = false;
+  bool pendingCustomMessage = false;
+  uint8_t customCandidateIndex = 0;
+  char customMessage[80];
+  uint8_t customMessageLen = 0;
+
   AdvertPath recent[UI_RECENT_LIST_SIZE];
 
 
@@ -287,10 +337,138 @@ public:
       display.setTextSize(1);
       display.drawTextCentered(display.width() / 2, 64 - 11, "toggle: " PRESS_LABEL);
     } else if (_page == HomePage::CANNED) {
-      display.setColor(DisplayDriver::GREEN);
-      display.drawXbm((display.width() - 32) / 2, 18, advert_icon, 32, 32);
-      display.setTextSize(1);
-      display.drawTextCentered(display.width() / 2, 64 - 11, "send: " PRESS_LABEL);
+
+        display.setColor(DisplayDriver::GREEN);
+        display.setTextSize(1);
+
+        if (!selectingCanned && !selectingChannel && !composingCustom) {
+
+            display.drawXbm((display.width() - 32) / 2, 18,
+                advert_icon, 32, 32);
+
+            display.drawTextCentered(
+                display.width()/2,
+                48,
+                "Send canned msg"
+            );
+
+            display.drawTextCentered(
+                display.width()/2,
+                58,
+                " "
+            );
+
+        } else if (composingCustom) {
+
+            const char *candidate = customCandidates[customCandidateIndex];
+            display.drawTextCentered(
+                display.width()/2,
+                8,
+                "Custom Message"
+            );
+
+            display.setColor(DisplayDriver::YELLOW);
+            display.drawTextCentered(
+                display.width()/2,
+                22,
+                customMessageLen ? customMessage : "<empty>"
+            );
+
+            display.setColor(DisplayDriver::LIGHT);
+            display.drawTextCentered(
+                display.width()/2,
+                36,
+                "char:"
+            );
+            display.setColor(DisplayDriver::YELLOW);
+            display.drawTextCentered(
+                display.width()/2,
+                46,
+                candidate
+            );
+            display.setColor(DisplayDriver::LIGHT);
+            display.drawTextCentered(
+                display.width()/2,
+                56,
+                "short press scroll"
+            );
+            display.drawTextCentered(
+                display.width()/2,
+                64,
+                " "
+            );
+
+        } else if (selectingCanned) {
+
+            bool custom = (cannedIndex == NUM_CANNED_MESSAGES);
+            const char *label = custom ? "Custom" : cannedMessages[cannedIndex].label;
+
+            display.drawTextCentered(
+                display.width()/2,
+                8,
+                "Select Message"
+            );
+
+            display.setColor(DisplayDriver::YELLOW);
+            display.drawTextCentered(
+                display.width()/2,
+                28,
+                label
+            );
+
+            display.setColor(DisplayDriver::LIGHT);
+            display.drawTextCentered(
+                display.width()/2,
+                46,
+                "short press to scroll"
+            );
+            display.drawTextCentered(
+                display.width()/2,
+                56,
+                " "
+            );
+
+        } else if (selectingChannel) {
+
+            bool back = (channelIndex == channelListCount);
+            char buf[32] = "";
+
+            if (!back && channelIndex < channelListCount) {
+                ChannelDetails channel;
+                if (the_mesh.getChannel(channelList[channelIndex], channel)) {
+                    if (channel.name[0] != '\0') {
+                        snprintf(buf, sizeof(buf), "%s", channel.name);
+                    } else {
+                        snprintf(buf, sizeof(buf), "Channel %d", channelList[channelIndex]);
+                    }
+                }
+            }
+
+            display.drawTextCentered(
+                display.width()/2,
+                8,
+                "Select Channel"
+            );
+
+            display.setColor(DisplayDriver::YELLOW);
+            display.drawTextCentered(
+                display.width()/2,
+                28,
+                back ? "Back" : (buf[0] ? buf : "No channel")
+            );
+
+            display.setColor(DisplayDriver::LIGHT);
+            display.drawTextCentered(
+                display.width()/2,
+                46,
+                "short press to scroll"
+            );
+            display.drawTextCentered(
+                display.width()/2,
+                56,
+                "long press to send"
+            );
+        }
     } else if (_page == HomePage::ADVERT) {
       display.setColor(DisplayDriver::GREEN);
       display.drawXbm((display.width() - 32) / 2, 18, advert_icon, 32, 32);
@@ -420,6 +598,186 @@ public:
   }
 
   bool handleInput(char c) override {
+    if (_page == HomePage::CANNED) {
+        if (c == KEY_SELECT) {
+            if (!selectingCanned && !selectingChannel && !composingCustom) {
+                selectingCanned = true;
+                cannedIndex = 0;
+                return true;
+            }
+
+            if (composingCustom) {
+                const char *candidate = customCandidates[customCandidateIndex];
+                if (strcmp(candidate, "SEND") == 0) {
+                    if (customMessageLen == 0) {
+                        _task->showAlert("Message empty", 1000);
+                        return true;
+                    }
+                    selectingChannel = true;
+                    composingCustom = false;
+                    pendingCustomMessage = true;
+                    selectingCanned = false;
+                    channelListCount = 0;
+                    ChannelDetails channel;
+                    for (uint8_t i = 0; i < 8; i++) {
+                        if (the_mesh.getChannel(i, channel)) {
+                            channelList[channelListCount++] = i;
+                        }
+                    }
+                    channelIndex = 0;
+                    return true;
+                } else if (strcmp(candidate, "DEL") == 0) {
+                    if (customMessageLen > 0) {
+                        customMessageLen--;
+                        customMessage[customMessageLen] = '\0';
+                    }
+                    return true;
+                } else if (strcmp(candidate, "BACK") == 0) {
+                    composingCustom = false;
+                    pendingCustomMessage = false;
+                    selectingCanned = false;
+                    selectingChannel = false;
+                    return true;
+                } else {
+                    if (customMessageLen < (int)sizeof(customMessage) - 1) {
+                        customMessage[customMessageLen++] = candidate[0];
+                        customMessage[customMessageLen] = '\0';
+                    }
+                    return true;
+                }
+            }
+
+            if (selectingCanned) {
+                if (cannedIndex == NUM_CANNED_MESSAGES) {
+                    selectingCanned = false;
+                    composingCustom = true;
+                    pendingCustomMessage = false;
+                    customCandidateIndex = 0;
+                    customMessageLen = 0;
+                    customMessage[0] = '\0';
+                    return true;
+                }
+
+                selectingCanned = false;
+                selectingChannel = true;
+                pendingCustomMessage = false;
+                channelListCount = 0;
+                ChannelDetails channel;
+                for (uint8_t i = 0; i < 8; i++) {
+                    if (the_mesh.getChannel(i, channel)) {
+                        channelList[channelListCount++] = i;
+                    }
+                }
+                channelIndex = 0;
+                return true;
+            }
+
+            if (selectingChannel) {
+                if (channelIndex == channelListCount) {
+                    selectingChannel = false;
+                    selectingCanned = false;
+                    if (pendingCustomMessage) {
+                        composingCustom = true;
+                    }
+                    pendingCustomMessage = false;
+                    return true;
+                }
+
+                ChannelDetails channel;
+                if (channelIndex < channelListCount &&
+                    the_mesh.getChannel(channelList[channelIndex], channel)) {
+                    const char *msg = pendingCustomMessage ? customMessage : cannedMessages[cannedIndex].text;
+                    size_t msgLen = pendingCustomMessage ? customMessageLen : strlen(msg);
+                    if (the_mesh.sendGroupMessage(
+                            millis(),
+                            channel.channel,
+                            the_mesh.getNodePrefs()->node_name,
+                            msg,
+                            msgLen)) {
+                        _task->showAlert("Message Sent", 1200);
+                    } else {
+                        _task->showAlert("Send Failed", 1200);
+                    }
+                }
+
+                selectingChannel = false;
+                selectingCanned = false;
+                composingCustom = false;
+                pendingCustomMessage = false;
+                return true;
+            }
+        }
+
+        if (c == KEY_ENTER || c == KEY_NEXT) {
+            if (composingCustom) {
+                customCandidateIndex++;
+                if (customCandidateIndex >= NUM_CUSTOM_CANDIDATES) {
+                    customCandidateIndex = 0;
+                }
+                return true;
+            }
+
+            if (selectingCanned) {
+                cannedIndex++;
+                if (cannedIndex > NUM_CANNED_MESSAGES)
+                    cannedIndex = 0;
+                return true;
+            }
+
+            if (selectingChannel) {
+                channelIndex++;
+                if (channelIndex > channelListCount)
+                    channelIndex = 0;
+                return true;
+            }
+
+            // allow page navigation when not in canned/channel/compose mode
+            if (!selectingCanned && !selectingChannel && !composingCustom) {
+                _page = (_page + 1) % HomePage::Count;
+                if (_page == HomePage::RECENT) {
+                    _task->showAlert("Recent adverts", 800);
+                }
+                return true;
+            }
+        }
+
+        if (c == KEY_LEFT || c == KEY_PREV) {
+            if (composingCustom) {
+                if (customCandidateIndex == 0) {
+                    customCandidateIndex = NUM_CUSTOM_CANDIDATES - 1;
+                } else {
+                    customCandidateIndex--;
+                }
+                return true;
+            }
+
+            if (selectingCanned) {
+                if (cannedIndex == 0) {
+                    cannedIndex = NUM_CANNED_MESSAGES;
+                } else {
+                    cannedIndex--;
+                }
+                return true;
+            }
+
+            if (selectingChannel) {
+                if (channelIndex == 0) {
+                    channelIndex = channelListCount;
+                } else {
+                    channelIndex--;
+                }
+                return true;
+            }
+
+            if (!selectingCanned && !selectingChannel && !composingCustom) {
+                _page = (_page + HomePage::Count - 1) % HomePage::Count;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     if (c == KEY_LEFT || c == KEY_PREV) {
       _page = (_page + HomePage::Count - 1) % HomePage::Count;
       return true;
@@ -436,19 +794,6 @@ public:
         _task->disableSerial();
       } else {
         _task->enableSerial();
-      }
-      return true;
-    }
-    if (c == KEY_ENTER && _page == HomePage::CANNED) {
-      ChannelDetails channel;
-      if (the_mesh.getChannel(0, channel)) {
-        if (the_mesh.sendGroupMessage(millis(), channel.channel, the_mesh.getNodePrefs()->node_name, "test", 4)) {
-          _task->showAlert("Sent test", 1000);
-        } else {
-          _task->showAlert("Send failed", 1000);
-        }
-      } else {
-        _task->showAlert("Public channel missing", 1000);
       }
       return true;
     }
@@ -885,6 +1230,8 @@ char UITask::handleLongPress(char c) {
   if (millis() - ui_started_at < 8000) {   // long press in first 8 seconds since startup -> CLI/rescue
     the_mesh.enterCLIRescue();
     c = 0;   // consume event
+  } else if (c == KEY_ENTER) {
+    c = KEY_SELECT;
   }
   return c;
 }
