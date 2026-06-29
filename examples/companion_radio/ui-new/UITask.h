@@ -53,6 +53,8 @@ class UITask : public AbstractUITask {
   UIScreen* msg_preview;
   UIScreen* curr;
 
+  int _unread_count = 0;
+
   void userLedHandler();
 
   // Button action handlers
@@ -73,8 +75,11 @@ public:
   void begin(DisplayDriver* display, SensorManager* sensors, NodePrefs* node_prefs);
 
   void gotoHomeScreen() { setCurrScreen(home); }
+  void gotoInbox()      { setCurrScreen(msg_preview); }
+  void onInboxCleared() { _unread_count = 0; _msgcount = 0; }
   void showAlert(const char* text, int duration_millis);
-  int  getMsgCount() const { return _msgcount; }
+  int  getMsgCount()    const { return _msgcount; }
+  int  getUnreadCount() const { return _unread_count; }
   bool hasDisplay() const { return _display != NULL; }
   bool isButtonPressed() const;
 
